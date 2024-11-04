@@ -1,0 +1,3 @@
+@VetraHub_HostAddress = http://localhost:5109
+
+GET http://localhost:5109/api/pulse
