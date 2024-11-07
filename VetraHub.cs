@@ -3,6 +3,7 @@ using WebPush;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using System.Diagnostics;
 
 public class VetraHub
 {
@@ -81,6 +82,49 @@ public class VetraHub
             
             return Results.Ok();
         });
+        
+        app.MapPost("/api/restart", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime, IWebHostEnvironment env) =>
+        {
+            if (message.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to restart server");
+                return Results.Unauthorized();
+            }
+
+            logs.AddLog("Server restarting...");
+
+            if (env.EnvironmentName == "Development")
+            {
+                // Detect if running in development and restart using `dotnet run`
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = "run", // Adjust as needed
+                    UseShellExecute = false
+                };
+
+                Process.Start(startInfo);
+            }
+            else
+            {
+                // Relaunch the application normally
+                var executable = Process.GetCurrentProcess().MainModule?.FileName;
+                if (executable != null)
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = executable,
+                        UseShellExecute = false
+                    });
+                }
+            }
+
+            // Stop the current instance
+            lifetime.StopApplication();
+
+            return Results.Ok("Server restarting...");
+        });
+
 
         app.MapPost("/api/logs", (WebLogRequest request, LogRepository logs, IOptions<WebPushConfig> config) =>
         {
