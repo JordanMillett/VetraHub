@@ -22,7 +22,19 @@ public class WebPushConfig
     public required string Subject { get; set; }
     public required string PublicVapidKey { get; set; }
     public required string PrivateVapidKey { get; set; }
-    public required string NotificationPasswordHash { get; set; }
+    public required string PasswordHash { get; set; }
+}
+
+//SYNC ACROSS VETRA
+public class PasswordMessage
+{
+    public required string Password { get; set; }
+}
+
+public class WebLogRequest
+{
+    public required int Count { get; set; }
+    public required string Password { get; set; }
 }
 
 public class WebNotificationRequest

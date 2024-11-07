@@ -47,9 +47,10 @@ public class SubscriberRepository
     public void ClearSubscribers(LogRepository logs)
     {
         using var connection = new SqliteConnection(connectionID);
+        int count = connection.QuerySingle<int>("SELECT COUNT(*) FROM Subscribers");
         connection.Execute("DELETE FROM Subscribers");
 
-        logs.AddLog("All subscribers cleared");
+        logs.AddLog($"{count} subscribers cleared");
     }
 }
 
@@ -66,22 +67,31 @@ public class LogRepository
     {
         using var connection = new SqliteConnection(connectionID);
         connection.Execute("INSERT INTO NotificationLogs (Message, Timestamp) VALUES (@Message, @Timestamp)",
-            new { Message = message, Timestamp = DateTime.Now });
+            new { Message = message, Timestamp = DateTime.UtcNow });
 
         Console.WriteLine(message);
     }
 
-    public IEnumerable<DataNotificationLog> GetLogs()
+    public IEnumerable<DataNotificationLog> GetAllLogs()
     {
         using var connection = new SqliteConnection(connectionID);
-        return connection.Query<DataNotificationLog>("SELECT * FROM NotificationLogs");
+        return connection.Query<DataNotificationLog>("SELECT * FROM NotificationLogs ORDER BY id DESC");
     }
     
+    public IEnumerable<DataNotificationLog> GetLogs(int count)
+    {
+        using var connection = new SqliteConnection(connectionID);
+        return connection.Query<DataNotificationLog>(
+            "SELECT * FROM NotificationLogs ORDER BY id DESC LIMIT @Count",
+            new { Count = count });
+    }
+
     public void ClearLogs()
     {
         using var connection = new SqliteConnection(connectionID);
+        int count = connection.QuerySingle<int>("SELECT COUNT(*) FROM NotificationLogs");
         connection.Execute("DELETE FROM NotificationLogs");
 
-        AddLog("All logs cleared");
+        AddLog($"{count} logs cleared");
     }
 }

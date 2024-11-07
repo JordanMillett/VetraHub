@@ -58,8 +58,6 @@ public class VetraHub
         SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
         LogRepository logs = app.Services.GetRequiredService<LogRepository>();
         logs.AddLog($"Server started with {repo.GetSubscriberCount()} subscribers");
-        //logRepository.AddLog("Server started at: " + DateTime.Now);
-        //logRepository.AddLog("Server has : " + DateTime.Now);
 
         app.UseCors("AllowSpecificOrigins");
 
@@ -67,16 +65,55 @@ public class VetraHub
         {
             return Results.Ok(true);
         });
-
-        app.MapGet("/api/logs", (LogRepository logs) =>
+        
+        app.MapPost("/api/shutdown", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime) =>
         {
-            return Results.Ok(logs.GetLogs());
+            if (message.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to shut down server");
+                return Results.Unauthorized();
+            }
+
+            lifetime.StopApplication();
+            
+            return Results.Ok();
         });
 
-        app.MapGet("/api/reset", (SubscriberRepository repo, LogRepository logs) =>
+        app.MapPost("/api/logs", (WebLogRequest request, LogRepository logs, IOptions<WebPushConfig> config) =>
         {
+            if (request.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to read logs");
+                return Results.Unauthorized();
+            }
+
+            if (request.Count == 0)
+                return Results.Ok(logs.GetAllLogs());
+            else
+                return Results.Ok(logs.GetLogs(request.Count));
+        });
+
+        app.MapPost("/api/clearlogs", (PasswordMessage message, LogRepository logs, IOptions<WebPushConfig> config) =>
+        {
+            if (message.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to clear logs");
+                return Results.Unauthorized();
+            }
+            
             logs.ClearLogs();
-            //repo.ClearSubscribers(logs);
+            return Results.Ok();
+        });
+        
+        app.MapPost("/api/clearsubscribers", (PasswordMessage message, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
+        {
+            if (message.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to clear subscribers");
+                return Results.Unauthorized();
+            }
+
+            repo.ClearSubscribers(logs);
             return Results.Ok();
         });
 
@@ -128,20 +165,18 @@ public class VetraHub
             return Results.Conflict("Already unsubscribed.");
         });
 
-        app.MapPost("/api/notifications/send", async (WebNotificationRequest request, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> webPushConfig) =>
-        {
-            var expectedHash = webPushConfig.Value.NotificationPasswordHash;
-
-            if (request.Password != expectedHash)
+        app.MapPost("/api/notifications/send", async (WebNotificationRequest request, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
+        {            
+            if (request.Password != config.Value.PasswordHash)
             {
-                logs.AddLog("Unauthorized attempted to send message");
+                logs.AddLog("Unauthorized attempted to send notification");
                 return Results.Unauthorized();
             }
 
-            var vapidDetails = new VapidDetails(
-                webPushConfig.Value.Subject,
-                webPushConfig.Value.PublicVapidKey,
-                webPushConfig.Value.PrivateVapidKey);
+            VapidDetails vapidDetails = new VapidDetails(
+                config.Value.Subject,
+                config.Value.PublicVapidKey,
+                config.Value.PrivateVapidKey);
 
             int successfulCount = 0;
 
@@ -160,14 +195,17 @@ public class VetraHub
                     await pushService.SendNotificationAsync(subscriber, JsonSerializer.Serialize(request.Content), vapidDetails);
                     successfulCount++;
                 }
-                catch
+                catch (WebPushException)
                 {
                     logs.AddLog("Failed to send notification to subscriber...removing");
                     repo.RemoveSubscriber(subscription);
+                }catch (Exception)
+                {
+                    logs.AddLog("Error sending notification to subscriber");
                 }
             }
 
-            logs.AddLog($"Successfully sent {request.Content.Title} to {successfulCount}");
+            logs.AddLog($"Successfully sent {successfulCount} subscribers {request.Content.Title}");
             return Results.Ok("Notification sent.");
         });
 
