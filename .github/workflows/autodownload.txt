@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# GitHub repository details
+REPO="your-username/your-repo-name"
+ASSET_NAME="linux-arm64.tar.gz"
+DEST_DIR="/path/to/your/app"
+TOKEN="your-personal-access-token" # Optional if the repo is private
+
+# Fetch the latest release
+LATEST_RELEASE=$(curl -s https://api.github.com/repos/$REPO/releases/latest)
+
+# Extract the download URL for the asset
+DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r ".assets[] | select(.name == \"$ASSET_NAME\").browser_download_url")
+
+# Ensure the download URL is found
+if [ -z "$DOWNLOAD_URL" ]; then
+  echo "Error: Could not find the asset in the latest release."
+  exit 1
+fi
+
+# Download the asset
+curl -L -H "Authorization: token $TOKEN" -o $ASSET_NAME "$DOWNLOAD_URL"
+
+# Extract the archive
+rm -rf $DEST_DIR
+mkdir -p $DEST_DIR
+tar -xzvf $ASSET_NAME -C $DEST_DIR
+
+# Restart the service (adjust this for your environment)
+sudo systemctl restart my-dotnet-server
+
+echo "Deployment complete."

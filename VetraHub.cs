@@ -38,6 +38,9 @@ public class VetraHub
         builder.WebHost.UseUrls("http://localhost:5109");
         //https://mole-factual-pleasantly.ngrok-free.app/api/pulse
         //ngrok http --url=mole-factual-pleasantly.ngrok-free.app 5109   
+        
+        //dotnet publish -c Release -r linux-arm64 --self-contained -o ./publish
+        //dotnet publish -c Release -r win-x86 --self-contained -o ./publish
 
         builder.Services.AddSingleton<SubscriberRepository>();
         builder.Services.AddSingleton<LogRepository>();
