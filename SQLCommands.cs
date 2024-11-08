@@ -99,8 +99,8 @@ public class LogRepository
         connection.Execute("INSERT INTO NotificationLogs (Message, Timestamp) VALUES (@Message, @Timestamp)",
             new { Message = message, Timestamp = DateTime.UtcNow });
 
-        string localTimeFormatted = DateTime.UtcNow.ToLocalTime().ToString("HH-mm-ss-fff");
-        Console.WriteLine($"[{localTimeFormatted}]: {message}");
+        string localTimeFormatted = DateTime.UtcNow.ToLocalTime().ToString("HH:mm:ss:fff");
+        Console.WriteLine($"[{localTimeFormatted}] {message}");
     }
 
     public IEnumerable<DataNotificationLog> GetAllLogs()
