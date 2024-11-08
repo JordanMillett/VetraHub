@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using System.Diagnostics;
+using System.Net;
 
 public class VetraHub
 {
@@ -24,6 +25,11 @@ public class VetraHub
                 Message TEXT NOT NULL,
                 Timestamp TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS Configuration (
+                Key TEXT PRIMARY KEY,
+                Value TEXT NOT NULL
+            );
+            INSERT OR IGNORE INTO Configuration (Key, Value) VALUES ('MaxSubscribers', '100');
         ");
 
         builder.Services.AddCors(options =>
@@ -56,12 +62,12 @@ public class VetraHub
         {
             SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
             LogRepository logs = app.Services.GetRequiredService<LogRepository>();
-            logs.AddLog($"Server shutdown with {repo.GetSubscriberCount()} subscribers");
+            logs.AddLog($"Server shutdown with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
         });
         
         SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
         LogRepository logs = app.Services.GetRequiredService<LogRepository>();
-        logs.AddLog($"Server started with {repo.GetSubscriberCount()} subscribers");
+        logs.AddLog($"Server started with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
 
         app.UseCors("AllowSpecificOrigins");
 
@@ -75,12 +81,12 @@ public class VetraHub
             if (message.Password != config.Value.PasswordHash)
             {
                 logs.AddLog("Unauthorized attempt to shut down server");
-                return Results.Unauthorized();
+                return Results.StatusCode(401); //Unauthorized
             }
 
             lifetime.StopApplication();
             
-            return Results.Ok();
+            return Results.StatusCode(200); //OK
         });
         
         app.MapPost("/api/restart", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime, IWebHostEnvironment env) =>
@@ -88,7 +94,7 @@ public class VetraHub
             if (message.Password != config.Value.PasswordHash)
             {
                 logs.AddLog("Unauthorized attempt to restart server");
-                return Results.Unauthorized();
+                return Results.StatusCode(401); //Unauthorized
             }
 
             logs.AddLog("Server restarting...");
@@ -122,7 +128,7 @@ public class VetraHub
             // Stop the current instance
             lifetime.StopApplication();
 
-            return Results.Ok("Server restarting...");
+            return Results.StatusCode(200); //OK
         });
 
 
@@ -131,7 +137,7 @@ public class VetraHub
             if (request.Password != config.Value.PasswordHash)
             {
                 logs.AddLog("Unauthorized attempt to read logs");
-                return Results.Unauthorized();
+                return Results.StatusCode(401); //Unauthorized
             }
 
             if (request.Count == 0)
@@ -145,11 +151,11 @@ public class VetraHub
             if (message.Password != config.Value.PasswordHash)
             {
                 logs.AddLog("Unauthorized attempt to clear logs");
-                return Results.Unauthorized();
+                return Results.StatusCode(401); //Unauthorized
             }
             
             logs.ClearLogs();
-            return Results.Ok();
+            return Results.StatusCode(200); //OK
         });
         
         app.MapPost("/api/clearsubscribers", (PasswordMessage message, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
@@ -157,18 +163,41 @@ public class VetraHub
             if (message.Password != config.Value.PasswordHash)
             {
                 logs.AddLog("Unauthorized attempt to clear subscribers");
-                return Results.Unauthorized();
+                return Results.StatusCode(401); //Unauthorized
             }
 
             repo.ClearSubscribers(logs);
-            return Results.Ok();
+            return Results.StatusCode(200); //OK
+        });
+        
+        app.MapPost("/api/setlimit", (SubscriberLimitMessage message, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
+        {
+            if (message.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to change subscriber limit");
+                return Results.StatusCode(401); //Unauthorized
+            }
+            
+            if (message.Limit < 0)
+            {
+                return Results.StatusCode(400); //Bad Request
+            }
+
+            repo.SetMaxSubscribers(message.Limit, logs);
+            return Results.StatusCode(200); //OK
         });
 
         app.MapPost("/api/notifications/subscribe", (PushSubscription subscription, SubscriberRepository repo, LogRepository logs) =>
         {
             if (string.IsNullOrEmpty(subscription.P256DH) || string.IsNullOrEmpty(subscription.Auth))
             {
-                return Results.BadRequest("Invalid subscription.");
+                return Results.StatusCode(400); //Bad Request
+            }
+
+            if (repo.GetSubscriberCount() >= repo.GetMaxSubscribers())
+            {
+                logs.AddLog("Subscriber limit reached, cannot add new device");
+                return Results.StatusCode(507); //Insufficient Storage
             }
             
             DataSubscriber subscriber = new DataSubscriber
@@ -180,19 +209,19 @@ public class VetraHub
             
             if (repo.SubscriberExists(subscriber))
             {
-                return Results.Conflict("Already subscribed.");
+                return Results.StatusCode(204); //No Content
             }
 
             repo.AddSubscriber(subscriber);
             logs.AddLog("New Device: " + subscription.Endpoint[^10..]);
-            return Results.Ok("Subscribed successfully.");
+            return Results.StatusCode(201); //Created
         });
 
         app.MapPost("/api/notifications/unsubscribe", (PushSubscription subscription, SubscriberRepository repo, LogRepository logs) =>
         {
             if (string.IsNullOrEmpty(subscription.P256DH) || string.IsNullOrEmpty(subscription.Auth))
             {
-                return Results.BadRequest("Invalid subscription.");
+                return Results.StatusCode(400); //Bad Request
             }
             
             DataSubscriber subscriber = new DataSubscriber
@@ -206,10 +235,10 @@ public class VetraHub
             {
                 repo.RemoveSubscriber(subscriber);
                 logs.AddLog("Removed Device: " + subscription.Endpoint[^10..]);
-                return Results.Ok("Unsubscribed successfully.");
+                return Results.StatusCode(201); //Created
             }
-            
-            return Results.Conflict("Already unsubscribed.");
+
+            return Results.StatusCode(204); //No Content
         });
 
         app.MapPost("/api/notifications/send", async (WebNotificationRequest request, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
@@ -217,7 +246,7 @@ public class VetraHub
             if (request.Password != config.Value.PasswordHash)
             {
                 logs.AddLog("Unauthorized attempted to send notification");
-                return Results.Unauthorized();
+                return Results.StatusCode(401); //Unauthorized
             }
 
             VapidDetails vapidDetails = new VapidDetails(
@@ -226,6 +255,8 @@ public class VetraHub
                 config.Value.PrivateVapidKey);
 
             int successfulCount = 0;
+
+            bool failed = false;
 
             foreach (DataSubscriber subscription in repo.GetSubscribers())
             {
@@ -242,18 +273,35 @@ public class VetraHub
                     await pushService.SendNotificationAsync(subscriber, JsonSerializer.Serialize(request.Content), vapidDetails);
                     successfulCount++;
                 }
-                catch (WebPushException)
+                catch (WebPushException ex)
                 {
-                    logs.AddLog("Failed to send notification to subscriber...removing");
-                    repo.RemoveSubscriber(subscription);
-                }catch (Exception)
+                    if (ex.StatusCode == HttpStatusCode.RequestEntityTooLarge)
+                    {
+                        logs.AddLog("Notification content too large for subscriber");
+                        failed = true;
+                        break;
+                    }
+                    else if (ex.StatusCode == HttpStatusCode.NotFound || ex.StatusCode == HttpStatusCode.Gone)
+                    {
+                        logs.AddLog("Failed to send notification to subscriber...removing");
+                        repo.RemoveSubscriber(subscription);
+                    }
+                    else
+                    {
+                        logs.AddLog($"WebPushException: {ex.Message}");
+                        failed = true;
+                        break;
+                    }
+                }catch (Exception ex)
                 {
-                    logs.AddLog("Error sending notification to subscriber");
+                    logs.AddLog($"Error sending notification to subscriber: {ex.Message}");
+                    failed = true;
+                    break;
                 }
             }
 
-            logs.AddLog($"Successfully sent {successfulCount} subscribers {request.Content.Title}");
-            return Results.Ok("Notification sent.");
+            logs.AddLog($"Sent {successfulCount} subscribers {request.Content.Title}");
+            return failed ? Results.StatusCode(500) : Results.StatusCode(200); //Internal Server Error - OK
         });
 
         app.Run();

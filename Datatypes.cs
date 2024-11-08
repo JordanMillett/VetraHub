@@ -31,6 +31,12 @@ public class PasswordMessage
     public required string Password { get; set; }
 }
 
+public class SubscriberLimitMessage
+{
+    public required int Limit { get; set; }
+    public required string Password { get; set; }
+}
+
 public class WebLogRequest
 {
     public required int Count { get; set; }
