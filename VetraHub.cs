@@ -140,6 +140,9 @@ public class VetraHub
                 return Results.StatusCode(401); //Unauthorized
             }
 
+            if (request.Count < 0)
+                return Results.StatusCode(400); //Bad Request
+
             if (request.Count == 0)
                 return Results.Ok(logs.GetAllLogs());
             else
@@ -179,9 +182,7 @@ public class VetraHub
             }
             
             if (message.Limit < 0)
-            {
                 return Results.StatusCode(400); //Bad Request
-            }
 
             repo.SetMaxSubscribers(message.Limit, logs);
             return Results.StatusCode(200); //OK
@@ -247,6 +248,11 @@ public class VetraHub
             {
                 logs.AddLog("Unauthorized attempted to send notification");
                 return Results.StatusCode(401); //Unauthorized
+            }
+
+            if (request.Content.Title == "" || request.Content.Body == "")
+            {
+                return Results.StatusCode(400); //Bad Request
             }
 
             VapidDetails vapidDetails = new VapidDetails(
