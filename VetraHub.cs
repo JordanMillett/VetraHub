@@ -1,10 +1,13 @@
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 using WebPush;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using System.Diagnostics;
 using System.Net;
+using System.Runtime.InteropServices;
 
 public class VetraHub
 {
@@ -77,6 +80,77 @@ public class VetraHub
         app.MapGet("/api/pulse", () =>
         {
             return Results.Ok(true);
+        });
+        
+        app.MapPost("/api/update", async (HttpRequest message, IOptions<WebPushConfig> config, LogRepository logs) =>
+        {
+            string payload = await new StreamReader(message.Body).ReadToEndAsync();
+            string signature = message.Headers["X-Hub-Signature-256"].ToString();
+            
+            if (string.IsNullOrEmpty(signature))
+            {
+                logs.AddLog("Missing GitHub signature");
+                return Results.StatusCode(400); //Bad Request
+            }
+            
+            // GitHub sends the signature in the form 'sha256=<hash>'
+            string githubSignature = signature.StartsWith("sha256=") ? signature.Substring(7) : string.Empty;
+            if (string.IsNullOrEmpty(githubSignature))
+            {
+                logs.AddLog("Invalid GitHub signature format");
+                return Results.StatusCode(400); //Bad Request
+            }
+            
+            using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(config.Value.PasswordHash)))
+            {
+                var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
+                var computedSignature = BitConverter.ToString(computedHash).Replace("-", "").ToLower();
+
+                // Compare the computed hash with the GitHub signature
+                if (!computedSignature.Equals(githubSignature, StringComparison.OrdinalIgnoreCase))
+                {
+                    logs.AddLog("Unauthorized attempt to update server");
+                    return Results.StatusCode(401); //Unauthorized
+                }
+            }
+
+            logs.AddLog("Server shutting down to update");
+        
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    var process = new ProcessStartInfo("update-server.sh")
+                    {
+                        UseShellExecute = true,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = false
+                    };
+                    Process.Start(process);
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    var process = new ProcessStartInfo("cmd.exe", "/c update-server.bat")
+                    {
+                        UseShellExecute = true,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = false
+                    };
+                    Process.Start(process);
+                }
+                else
+                {
+                    logs.AddLog("Unsupported platform for update script");
+                    return Results.StatusCode(500); //Internal Server Error
+                }
+            }
+            catch (Exception ex)
+            {
+                logs.AddLog($"Error starting update script: {ex.Message}");
+                return Results.StatusCode(500); //Internal Server Error
+            }
+            
+            return Results.Ok();
         });
         
         app.MapPost("/api/shutdown", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime) =>

@@ -19,13 +19,13 @@ public class NotificationService : IHostedService, IDisposable
         logs = logrepo;
         config = configdata;
 
-        timer = new Timer(NotifyInactiveSubscribers, null, TimeSpan.Zero, TimeSpan.FromMinutes(CheckIntervalMinutes));
+        timer = new Timer(async _ => await NotifyInactiveSubscribers(null), null, TimeSpan.Zero, TimeSpan.FromMinutes(CheckIntervalMinutes));
 
         logs.AddLog("Notification Service Running");
         logs.AddLog($"Checking every {CheckIntervalMinutes} minutes and reminding after {RemindThresholdMinutes} minutes");
     }
 
-    private void NotifyInactiveSubscribers(object? state)
+    private async Task NotifyInactiveSubscribers(object? state)
     {
         logs.AddLog("Checking for inactive subscribers");
         
@@ -64,7 +64,7 @@ public class NotificationService : IHostedService, IDisposable
                 
                 try
                 {
-                    pushService.SendNotificationAsync(pushSubscription, json, vapidDetails).Wait();
+                    await pushService.SendNotificationAsync(pushSubscription, json, vapidDetails);
                     repo.UpdateActivity(subscriber.Endpoint);
                     successfulCount++;
                 }
