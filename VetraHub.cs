@@ -18,7 +18,8 @@ public class VetraHub
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 Endpoint TEXT NOT NULL,
                 P256DH TEXT NOT NULL,
-                Auth TEXT NOT NULL
+                Auth TEXT NOT NULL,
+                LastActive DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS NotificationLogs (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +54,8 @@ public class VetraHub
         builder.Services.AddSingleton<LogRepository>();
         
         builder.Services.Configure<WebPushConfig>(builder.Configuration.GetSection("WebPush"));
+
+        builder.Services.AddHostedService<NotificationService>();
 
         var app = builder.Build();
         
@@ -201,17 +204,19 @@ public class VetraHub
                 return Results.StatusCode(507); //Insufficient Storage
             }
             
+            if (repo.SubscriberExists(subscription.Endpoint))
+            {
+                repo.UpdateActivity(subscription.Endpoint);
+                return Results.StatusCode(204); //No Content
+            }
+            
             DataSubscriber subscriber = new DataSubscriber
             {
                 Endpoint = subscription.Endpoint,
                 P256DH = subscription.P256DH,
-                Auth = subscription.Auth
+                Auth = subscription.Auth,
+                LastActive = DateTime.UtcNow
             };
-            
-            if (repo.SubscriberExists(subscriber))
-            {
-                return Results.StatusCode(204); //No Content
-            }
 
             repo.AddSubscriber(subscriber);
             logs.AddLog("New Device: " + subscription.Endpoint[^10..]);
@@ -225,16 +230,9 @@ public class VetraHub
                 return Results.StatusCode(400); //Bad Request
             }
             
-            DataSubscriber subscriber = new DataSubscriber
+            if (repo.SubscriberExists(subscription.Endpoint))
             {
-                Endpoint = subscription.Endpoint,
-                P256DH = subscription.P256DH,
-                Auth = subscription.Auth
-            };
-            
-            if (repo.SubscriberExists(subscriber))
-            {
-                repo.RemoveSubscriber(subscriber);
+                repo.RemoveSubscriber(subscription.Endpoint);
                 logs.AddLog("Removed Device: " + subscription.Endpoint[^10..]);
                 return Results.StatusCode(201); //Created
             }
@@ -261,7 +259,6 @@ public class VetraHub
                 config.Value.PrivateVapidKey);
 
             int successfulCount = 0;
-
             bool failed = false;
 
             foreach (DataSubscriber subscription in repo.GetSubscribers())
@@ -273,7 +270,7 @@ public class VetraHub
                     Auth = subscription.Auth
                 };
                 
-                var pushService = new WebPushClient();
+                WebPushClient pushService = new WebPushClient();
                 try
                 {
                     await pushService.SendNotificationAsync(subscriber, JsonSerializer.Serialize(request.Content), vapidDetails);
@@ -290,7 +287,7 @@ public class VetraHub
                     else if (ex.StatusCode == HttpStatusCode.NotFound || ex.StatusCode == HttpStatusCode.Gone)
                     {
                         logs.AddLog("Failed to send notification to subscriber...removing");
-                        repo.RemoveSubscriber(subscription);
+                        repo.RemoveSubscriber(subscription.Endpoint);
                     }
                     else
                     {

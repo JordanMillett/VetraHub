@@ -10,14 +10,21 @@ public class SubscriberRepository
         connectionID = config.GetConnectionString("DefaultConnection")!;
     }
     
-    public bool SubscriberExists(DataSubscriber subscriber)
+    public bool SubscriberExists(string endpoint)
     {
         using var connection = new SqliteConnection(connectionID);
         var count = connection.ExecuteScalar<int>(
             "SELECT COUNT(1) FROM Subscribers WHERE Endpoint = @Endpoint", 
-            new { subscriber.Endpoint }
+            new { Endpoint = endpoint }
         );
         return count > 0;
+    }
+
+    public void UpdateActivity(string endpoint)
+    {
+        using var connection = new SqliteConnection(connectionID);
+        connection.Execute("UPDATE Subscribers SET LastActive = @LastActive WHERE Endpoint = @Endpoint", 
+            new { LastActive = DateTime.UtcNow, Endpoint = endpoint });
     }
 
     public void AddSubscriber(DataSubscriber subscriber)
@@ -26,10 +33,10 @@ public class SubscriberRepository
         connection.Execute("INSERT INTO Subscribers (Endpoint, P256DH, Auth) VALUES (@Endpoint, @P256DH, @Auth)", subscriber);
     }
 
-    public bool RemoveSubscriber(DataSubscriber subscriber)
+    public bool RemoveSubscriber(string endpoint)
     {
         using var connection = new SqliteConnection(connectionID);
-        return connection.Execute("DELETE FROM Subscribers WHERE Endpoint = @Endpoint", new { subscriber.Endpoint }) > 0;
+        return connection.Execute("DELETE FROM Subscribers WHERE Endpoint = @Endpoint", new { Endpoint = endpoint }) > 0;
     }
 
     public IEnumerable<DataSubscriber> GetSubscribers()

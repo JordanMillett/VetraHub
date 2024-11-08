@@ -6,6 +6,7 @@ public class DataSubscriber
     public required string Endpoint { get; set; }
     public required string P256DH { get; set; }
     public required string Auth { get; set; }
+    public DateTime LastActive { get; set; } = DateTime.UtcNow;
 }
 
 public class DataNotificationLog
