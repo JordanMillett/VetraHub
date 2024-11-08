@@ -114,7 +114,7 @@ public class VetraHub
                 }
             }
 
-            logs.AddLog("Restarting server to update");
+            logs.AddLog("Restarting server to update...");
         
             try
             {
