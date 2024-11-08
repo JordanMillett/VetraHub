@@ -114,7 +114,7 @@ public class VetraHub
                 }
             }
 
-            logs.AddLog("Server shutting down to update");
+            logs.AddLog("Restarting server to update");
         
             try
             {
@@ -150,7 +150,7 @@ public class VetraHub
                 return Results.StatusCode(500); //Internal Server Error
             }
             
-            return Results.Ok();
+            return Results.StatusCode(200); //OK
         });
         
         app.MapPost("/api/shutdown", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime) =>
@@ -166,7 +166,7 @@ public class VetraHub
             return Results.StatusCode(200); //OK
         });
         
-        app.MapPost("/api/restart", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime, IWebHostEnvironment env) =>
+        app.MapPost("/api/restart", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime) =>
         {
             if (message.Password != config.Value.PasswordHash)
             {
@@ -175,39 +175,52 @@ public class VetraHub
             }
 
             logs.AddLog("Server restarting...");
-
-            if (env.EnvironmentName == "Development")
+            
+            var startInfo = new ProcessStartInfo
             {
-                // Detect if running in development and restart using `dotnet run`
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = "dotnet",
-                    Arguments = "run", // Adjust as needed
-                    UseShellExecute = false
-                };
+                FileName = "dotnet",
+                Arguments = "run",
+                UseShellExecute = true,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false
+            };
 
-                Process.Start(startInfo);
-            }
-            else
+            try
             {
-                // Relaunch the application normally
-                var executable = Process.GetCurrentProcess().MainModule?.FileName;
-                if (executable != null)
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 {
-                    Process.Start(new ProcessStartInfo
+                    var process = new ProcessStartInfo("update-server.sh")
                     {
-                        FileName = executable,
-                        UseShellExecute = false
-                    });
+                        UseShellExecute = true,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = false
+                    };
+                    Process.Start(process);
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    var process = new ProcessStartInfo("cmd.exe", "/c update-server.bat")
+                    {
+                        UseShellExecute = true,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = false
+                    };
+                    Process.Start(process);
+                }
+                else
+                {
+                    logs.AddLog("Unsupported platform for update script");
+                    return Results.StatusCode(500); //Internal Server Error
                 }
             }
-
-            // Stop the current instance
-            lifetime.StopApplication();
+            catch (Exception ex)
+            {
+                logs.AddLog($"Error starting update script: {ex.Message}");
+                return Results.StatusCode(500); //Internal Server Error
+            }
 
             return Results.StatusCode(200); //OK
         });
-
 
         app.MapPost("/api/logs", (WebLogRequest request, LogRepository logs, IOptions<WebPushConfig> config) =>
         {
