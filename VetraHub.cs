@@ -11,6 +11,24 @@ using System.Runtime.InteropServices;
 
 public class VetraHub
 {
+    static string DatabaseSize()
+    {
+        string fileName = "notifications.db";
+        string filePath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+        
+        if (File.Exists(filePath))
+        {
+            FileInfo fileInfo = new FileInfo(filePath);
+            long fileSizeInBytes = fileInfo.Length;
+            double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
+            return $"{fileSizeInMB:F2} MB";
+        }
+        else
+        {
+            return "Empty";
+        }
+    }
+    
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -68,12 +86,12 @@ public class VetraHub
         {
             SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
             LogRepository logs = app.Services.GetRequiredService<LogRepository>();
-            logs.AddLog($"Server shutdown with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
+            logs.AddLog($"{DatabaseSize()} Server shutdown with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
         });
         
         SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
         LogRepository logs = app.Services.GetRequiredService<LogRepository>();
-        logs.AddLog($"Server started with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
+        logs.AddLog($"{DatabaseSize()} Server started with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
 
         app.UseCors("AllowSpecificOrigins");
 
