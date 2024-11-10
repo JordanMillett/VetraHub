@@ -52,6 +52,7 @@ public class VetraHub
                 Value TEXT NOT NULL
             );
             INSERT OR IGNORE INTO Configuration (Key, Value) VALUES ('MaxSubscribers', '100');
+            INSERT OR IGNORE INTO Configuration (Key, Value) VALUES ('AlertDevice', '');
         ");
 
         builder.Services.AddCors(options =>
@@ -76,9 +77,14 @@ public class VetraHub
         
         builder.Services.Configure<WebPushConfig>(builder.Configuration.GetSection("WebPush"));
 
+        builder.Services.AddSingleton<AlertService>();
         builder.Services.AddHostedService<NotificationService>();
 
         var app = builder.Build();
+        
+        AlertService Alert = app.Services.GetRequiredService<AlertService>();
+        
+        DateTime ServerStartTime = DateTime.UtcNow;
         
         // Log shutdown time when the application stops
         var lifetime = app.Lifetime;
@@ -86,13 +92,18 @@ public class VetraHub
         {
             SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
             LogRepository logs = app.Services.GetRequiredService<LogRepository>();
+            TimeSpan Uptime = DateTime.UtcNow - ServerStartTime;
+            
+            logs.AddLog($"Server uptime was {Uptime.Days} days {Uptime.Hours} hours {Uptime.Minutes} minutes {Uptime.Seconds} seconds");
             logs.AddLog($"{DatabaseSize()} Server shutdown with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
+            Alert.NotifyAlertDevice("Server Shutdown");
         });
         
         SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
         LogRepository logs = app.Services.GetRequiredService<LogRepository>();
         logs.AddLog($"{DatabaseSize()} Server started with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
-
+        Alert.NotifyAlertDevice("Server Started");
+        
         app.UseCors("AllowSpecificOrigins");
 
         app.MapGet("/api/pulse", () =>
@@ -295,6 +306,31 @@ public class VetraHub
             repo.SetMaxSubscribers(message.Limit, logs);
             return Results.StatusCode(200); //OK
         });
+        
+        app.MapPost("/api/setalertdevice", (AlertDeviceMessage message, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
+        {
+            if (message.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to change alert device");
+                return Results.StatusCode(401); //Unauthorized
+            }
+            
+            if (message.Endpoint == "")
+                return Results.StatusCode(400); //Bad Request
+
+            if (!repo.SubscriberExists(message.Endpoint))
+            {
+                logs.AddLog("Alert device is not a subscriber");
+                return Results.StatusCode(409); //Conflict
+            }
+
+            Alert.NotifyAlertDevice("Alert device status removed");
+          
+            repo.SetAlertDevice(message.Endpoint, logs);
+            
+            Alert.NotifyAlertDevice("Alert device status added");
+            return Results.StatusCode(200); //OK
+        });
 
         app.MapPost("/api/notifications/subscribe", (PushSubscription subscription, SubscriberRepository repo, LogRepository logs) =>
         {
@@ -306,6 +342,7 @@ public class VetraHub
             if (repo.GetSubscriberCount() >= repo.GetMaxSubscribers())
             {
                 logs.AddLog("Subscriber limit reached, cannot add new device");
+                Alert.NotifyAlertDevice("Max Subscribers Reached");
                 return Results.StatusCode(507); //Insufficient Storage
             }
             

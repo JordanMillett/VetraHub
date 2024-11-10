@@ -19,6 +19,16 @@ public class SubscriberRepository
         );
         return count > 0;
     }
+    
+    public DataSubscriber GetSubscriber(string endpoint)
+    {
+        using var connection = new SqliteConnection(connectionID);
+        DataSubscriber subscriber = connection.QueryFirstOrDefault<DataSubscriber>(
+            "SELECT * FROM Subscribers WHERE Endpoint = @Endpoint", 
+            new { Endpoint = endpoint })!;
+            
+        return subscriber;
+    }
 
     public void UpdateActivity(string endpoint)
     {
@@ -81,6 +91,22 @@ public class SubscriberRepository
         connection.Execute(query, new { NewLimit = newLimit });
         
         logs.AddLog($"Max subscriber limit changed from {oldLimit} to {newLimit}");
+    }
+    
+    public string GetAlertDevice()
+    {
+        using var connection = new SqliteConnection(connectionID);
+        string query = "SELECT Value FROM Configuration WHERE Key = 'AlertDevice'";
+        return connection.ExecuteScalar<string>(query) ?? "";
+    }
+    
+    public void SetAlertDevice(string endpoint, LogRepository logs)
+    {
+        using var connection = new SqliteConnection(connectionID);
+        string query = "UPDATE Configuration SET Value = @Endpoint WHERE Key = 'AlertDevice'";
+        connection.Execute(query, new { Endpoint = endpoint });
+        
+        logs.AddLog($"Alert device set to {endpoint[^10..]}");
     }
 }
 

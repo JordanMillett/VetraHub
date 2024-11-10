@@ -17,7 +17,6 @@ public class DataNotificationLog
 }
 
 // WEB
-
 public class WebPushConfig
 {
     public required string Subject { get; set; }
@@ -27,6 +26,12 @@ public class WebPushConfig
 }
 
 //SYNC ACROSS VETRA
+public class AlertDeviceMessage
+{
+    public required string Endpoint { get; set; }
+    public required string Password { get; set; }
+}
+
 public class PasswordMessage
 {
     public required string Password { get; set; }
