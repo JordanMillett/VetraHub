@@ -1,0 +1,25 @@
+ssh pi.local
+screen -S VetraHub
+screen -ls
+screen -r VetraHub
+
+CTRL-A D (Detach)
+CTRL-A K (Kill)
+
+dotnet run
+
+./update-server.sh
+sqlite3 notifications.db
+chmod 660 notifications.db
+chown jello:jello notifications.db
+
+
+MIGRATE APP SETTING JSON BOZO
+
+
+needs
+- dotnet 8.0 SDK ARM64 and dependencies
+- cloudflared
+- sqlite3
+- github cli
+- git
