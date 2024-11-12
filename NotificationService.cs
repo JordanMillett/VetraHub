@@ -10,8 +10,8 @@ public class NotificationService : IHostedService, IDisposable
     private readonly IOptions<WebPushConfig> config;
     private readonly Timer timer;
 
-    public static int CheckIntervalMinutes = 10;
-    public static int RemindThresholdMinutes = 30;
+    public static int CheckIntervalMinutes = 30;
+    public static int RemindThresholdMinutes = 300;
 
     public NotificationService(SubscriberRepository subrepo, LogRepository logrepo, IOptions<WebPushConfig> configdata)
     {
