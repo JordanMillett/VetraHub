@@ -285,7 +285,7 @@ public class Program
             return Results.StatusCode(200); //OK
         });
         
-        app.MapPost("/api/clearsubscribers", (PasswordMessage message, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
+        app.MapPost("/api/clearsubscribers", (PasswordMessage message, SubscriberRepository repo, LogRepository logs, KeyRepository keys, IOptions<WebPushConfig> config) =>
         {
             if (message.Password != config.Value.PasswordHash)
             {
@@ -293,6 +293,7 @@ public class Program
                 return Results.StatusCode(401); //Unauthorized
             }
 
+            keys.SetAlertDevice("", logs);
             repo.ClearSubscribers(logs);
             return Results.StatusCode(200); //OK
         });
