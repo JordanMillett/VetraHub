@@ -8,8 +8,9 @@ using Dapper;
 using System.Diagnostics;
 using System.Net;
 using System.Runtime.InteropServices;
+using VetraHub;
 
-public class VetraHub
+public class Program
 {
     static string DatabaseSize()
     {
@@ -68,10 +69,11 @@ public class VetraHub
         builder.WebHost.UseUrls("http://localhost:5109");
         //https://mole-factual-pleasantly.ngrok-free.app/api/pulse
         //ngrok http --url=mole-factual-pleasantly.ngrok-free.app 5109   
-        
+
         //dotnet publish -c Release -r linux-arm64 --self-contained -o ./publish
         //dotnet publish -c Release -r win-x86 --self-contained -o ./publish
 
+        builder.Services.AddSingleton<KeyRepository>();
         builder.Services.AddSingleton<SubscriberRepository>();
         builder.Services.AddSingleton<LogRepository>();
         
@@ -79,6 +81,7 @@ public class VetraHub
 
         builder.Services.AddSingleton<AlertService>();
         builder.Services.AddHostedService<NotificationService>();
+        builder.Services.AddHostedService<HealthService>();
 
         var app = builder.Build();
         
@@ -92,16 +95,18 @@ public class VetraHub
         {
             SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
             LogRepository logs = app.Services.GetRequiredService<LogRepository>();
+            KeyRepository keys = app.Services.GetRequiredService<KeyRepository>();
             TimeSpan Uptime = DateTime.UtcNow - ServerStartTime;
             
             logs.AddLog($"Server uptime was {Uptime.Days} days {Uptime.Hours} hours {Uptime.Minutes} minutes {Uptime.Seconds} seconds");
-            logs.AddLog($"{DatabaseSize()} Server shutdown with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
+            logs.AddLog($"{DatabaseSize()} Server shutdown with {repo.GetSubscriberCount()} subscribers and {keys.GetMaxSubscribers()} sub cap");
             Alert.NotifyAlertDevice("Server Shutdown");
         });
         
         SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
         LogRepository logs = app.Services.GetRequiredService<LogRepository>();
-        logs.AddLog($"{DatabaseSize()} Server started with {repo.GetSubscriberCount()} subscribers and {repo.GetMaxSubscribers()} sub cap");
+        KeyRepository keys = app.Services.GetRequiredService<KeyRepository>();
+        logs.AddLog($"{DatabaseSize()} Server started with {repo.GetSubscriberCount()} subscribers and {keys.GetMaxSubscribers()} sub cap");
         Alert.NotifyAlertDevice("Server Started");
         
         app.UseCors("AllowSpecificOrigins");
@@ -292,7 +297,7 @@ public class VetraHub
             return Results.StatusCode(200); //OK
         });
         
-        app.MapPost("/api/setlimit", (SubscriberLimitMessage message, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
+        app.MapPost("/api/setlimit", (SubscriberLimitMessage message, SubscriberRepository repo, LogRepository logs, KeyRepository keys, IOptions<WebPushConfig> config) =>
         {
             if (message.Password != config.Value.PasswordHash)
             {
@@ -303,11 +308,11 @@ public class VetraHub
             if (message.Limit < 0)
                 return Results.StatusCode(400); //Bad Request
 
-            repo.SetMaxSubscribers(message.Limit, logs);
+            keys.SetMaxSubscribers(message.Limit, logs);
             return Results.StatusCode(200); //OK
         });
         
-        app.MapPost("/api/setalertdevice", (AlertDeviceMessage message, SubscriberRepository repo, LogRepository logs, IOptions<WebPushConfig> config) =>
+        app.MapPost("/api/setalertdevice", (AlertDeviceMessage message, SubscriberRepository repo, LogRepository logs, KeyRepository keys, IOptions<WebPushConfig> config) =>
         {
             if (message.Password != config.Value.PasswordHash)
             {
@@ -326,20 +331,20 @@ public class VetraHub
 
             Alert.NotifyAlertDevice("Alert device status removed");
           
-            repo.SetAlertDevice(message.Endpoint, logs);
+            keys.SetAlertDevice(message.Endpoint, logs);
             
             Alert.NotifyAlertDevice("Alert device status added");
             return Results.StatusCode(200); //OK
         });
 
-        app.MapPost("/api/notifications/subscribe", (PushSubscription subscription, SubscriberRepository repo, LogRepository logs) =>
+        app.MapPost("/api/notifications/subscribe", (PushSubscription subscription, SubscriberRepository repo, LogRepository logs, KeyRepository keys) =>
         {
             if (string.IsNullOrEmpty(subscription.P256DH) || string.IsNullOrEmpty(subscription.Auth))
             {
                 return Results.StatusCode(400); //Bad Request
             }
 
-            if (repo.GetSubscriberCount() >= repo.GetMaxSubscribers())
+            if (repo.GetSubscriberCount() >= keys.GetMaxSubscribers())
             {
                 logs.AddLog("Subscriber limit reached, cannot add new device");
                 Alert.NotifyAlertDevice("Max Subscribers Reached");

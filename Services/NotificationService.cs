@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using WebPush;
 using System.Text.Json;
 using System.Net;
+using VetraHub;
 
 public class NotificationService : IHostedService, IDisposable
 {

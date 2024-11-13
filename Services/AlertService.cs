@@ -2,17 +2,20 @@ using Microsoft.Extensions.Options;
 using WebPush;
 using System.Text.Json;
 using System.Net;
+using VetraHub;
 
 public class AlertService
 {
     private readonly SubscriberRepository repo;
     private readonly LogRepository logs;
+    private readonly KeyRepository keys;
     private readonly IOptions<WebPushConfig> config;
 
-    public AlertService(SubscriberRepository subrepo, LogRepository logrepo, IOptions<WebPushConfig> configdata)
+    public AlertService(SubscriberRepository subrepo, LogRepository logrepo, KeyRepository keyrepo, IOptions<WebPushConfig> configdata)
     {
         repo = subrepo;
         logs = logrepo;
+        keys = keyrepo;
         config = configdata;
 
         logs.AddLog("Alert Service Running");
@@ -20,7 +23,7 @@ public class AlertService
 
     public void NotifyAlertDevice(string message)
     {
-        string alertDevice = repo.GetAlertDevice();
+        string alertDevice = keys.GetAlertDevice();
         
         if (alertDevice != "")
         {
@@ -60,7 +63,7 @@ public class AlertService
                 else if (ex.StatusCode == HttpStatusCode.NotFound || ex.StatusCode == HttpStatusCode.Gone)
                 {
                     logs.AddLog("Failed to notify alert device...removing");
-                    repo.SetAlertDevice("", logs);
+                    keys.SetAlertDevice("", logs);
                 }
                 else
                 {
