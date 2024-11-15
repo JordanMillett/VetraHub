@@ -16,6 +16,21 @@ namespace  VetraHub
         public required string Message { get; set; }
         public required DateTime Timestamp { get; set; }
     }
+    
+    public class DataTraffic
+    {
+        public required int Id { get; set; }
+        public required string Address { get; set; }
+        public required string Name { get; set; }
+        public required string Version { get; set; }
+        public required string Layout { get; set; }
+        public required string Manufacturer { get; set; }
+        public required string Product { get; set; }
+        public required string Description { get; set; }
+        public required string System { get; set; }
+        public required string Timezone { get; set; }
+        public required string Language { get; set; }
+    }
 
     // WEB
     public class WebPushConfig

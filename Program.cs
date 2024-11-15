@@ -36,6 +36,19 @@ public class Program
             );
             INSERT OR IGNORE INTO Configuration (Key, Value) VALUES ('MaxSubscribers', '100');
             INSERT OR IGNORE INTO Configuration (Key, Value) VALUES ('AlertDevice', '');
+            CREATE TABLE IF NOT EXISTS Traffic (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Address TEXT NOT NULL,
+            Name TEXT NOT NULL,
+            Version TEXT NOT NULL,
+            Layout TEXT NOT NULL,
+            Manufacturer TEXT NOT NULL,
+            Product TEXT NOT NULL,
+            Description TEXT NOT NULL,
+            System TEXT NOT NULL,
+            Timezone TEXT NOT NULL,
+            Language TEXT NOT NULL
+            );
         ");
 
         builder.Services.AddCors(options =>
@@ -58,6 +71,7 @@ public class Program
         builder.Services.AddSingleton<KeyRepository>();
         builder.Services.AddSingleton<SubscriberRepository>();
         builder.Services.AddSingleton<LogRepository>();
+        builder.Services.AddSingleton<TrafficRepository>();
         
         builder.Services.Configure<WebPushConfig>(builder.Configuration.GetSection("WebPush"));
 
@@ -88,21 +102,40 @@ public class Program
             return Results.Ok(true);
         });
 
-        app.MapPost("/api/traffic", (TrafficMessage message, HttpContext context) =>
+        app.MapPost("/api/traffic", (TrafficMessage message, HttpContext context, TrafficRepository traffic, LogRepository logs) =>
         {
             string address = context.Connection.RemoteIpAddress!.ToString();
 
-            Console.WriteLine($"Client IP: {address}");
+            traffic.AddTraffic(address, message, logs);
+        });
+        
+        app.MapPost("/api/gettraffic", (WebLogRequest request, TrafficRepository traffic, LogRepository logs, IOptions<WebPushConfig> config) =>
+        {
+            if (request.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to read traffic");
+                return Results.StatusCode(401); //Unauthorized
+            }
+
+            if (request.Count < 0)
+                return Results.StatusCode(400); //Bad Request
+
+            if (request.Count == 0)
+                return Results.Ok(traffic.GetAllTraffic());
+            else
+                return Results.Ok(traffic.GetTraffic(request.Count));
+        });
+
+        app.MapPost("/api/cleartraffic", (PasswordMessage message, TrafficRepository traffic, LogRepository logs, IOptions<WebPushConfig> config) =>
+        {
+            if (message.Password != config.Value.PasswordHash)
+            {
+                logs.AddLog("Unauthorized attempt to clear traffic");
+                return Results.StatusCode(401); //Unauthorized
+            }
             
-            Console.WriteLine($"Name: {message.Name}");
-            Console.WriteLine($"Version: {message.Version}");
-            Console.WriteLine($"Layout: {message.Layout}");
-            Console.WriteLine($"Manufacturer: {message.Manufacturer}");
-            Console.WriteLine($"Product: {message.Product}");
-            Console.WriteLine($"Description: {message.Description}");
-            Console.WriteLine($"Operating System: {message.System}");
-            Console.WriteLine($"Timezone: {message.Timezone}");
-            Console.WriteLine($"Language: {message.Language}");
+            traffic.ClearTraffic(logs);
+            return Results.StatusCode(200); //OK
         });
         
         app.MapPost("/api/update", async (HttpRequest message, IOptions<WebPushConfig> config, LogRepository logs) =>
