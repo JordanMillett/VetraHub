@@ -10,26 +10,55 @@ using System.IO;
 public class HealthService : IHostedService, IDisposable
 {
     private readonly LogRepository logs;
+    private readonly SubscriberRepository repo;
+    private readonly KeyRepository keys;
     private readonly Timer timer;
+    
+    DateTime ServerStartTime = DateTime.UtcNow;
 
     public static int CheckIntervalMinutes = 120;
     
-    public HealthService(LogRepository logrepo)
+    public HealthService(LogRepository logrepo, SubscriberRepository subrepo, KeyRepository keysrepo)
     {
         logs = logrepo;
+        repo = subrepo;
+        keys = keysrepo;
 
-        timer = new Timer(LogHealth, null, TimeSpan.Zero, TimeSpan.FromMinutes(CheckIntervalMinutes));
+        timer = new Timer(LogHealth, null, TimeSpan.FromMinutes(CheckIntervalMinutes), TimeSpan.FromMinutes(CheckIntervalMinutes));
 
         logs.AddLog("Health Service Running");
         logs.AddLog($"Checking health every {CheckIntervalMinutes} minutes");
     }
 
-    void LogHealth(object? state)
+    public void LogHealth(object? state)
     {
+        TimeSpan Uptime = DateTime.UtcNow - ServerStartTime;
+        
         logs.AddLog($"System Name: {Environment.MachineName}");
         logs.AddLog($"Operating System: {RuntimeInformation.OSDescription}");
+        
+        logs.AddLog($"Server Uptime: {Uptime.Days} days {Uptime.Hours} hours {Uptime.Minutes} minutes {Uptime.Seconds} seconds");
+        logs.AddLog($"{DatabaseSize()} database with {repo.GetSubscriberCount()} subscribers and {keys.GetMaxSubscribers()} sub cap");
     
         logs.AddLog($"Memory Usage: {GetMemoryUsage()} MB");
+    }
+    
+    static string DatabaseSize()
+    {
+        string fileName = "notifications.db";
+        string filePath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+        
+        if (File.Exists(filePath))
+        {
+            FileInfo fileInfo = new FileInfo(filePath);
+            long fileSizeInBytes = fileInfo.Length;
+            double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
+            return $"{fileSizeInMB:F2} MB";
+        }
+        else
+        {
+            return "Empty";
+        }
     }
 
     private string GetMemoryUsage()

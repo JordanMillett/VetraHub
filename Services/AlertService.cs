@@ -23,9 +23,11 @@ public class AlertService
 
     public void NotifyAlertDevice(string message)
     {
+        logs.AddLog("ALERT: " + message);
+        
         string alertDevice = keys.GetAlertDevice();
         
-        if (alertDevice != "")
+        if (alertDevice != "" && repo.SubscriberExists(alertDevice))
         {
             VapidDetails vapidDetails = new VapidDetails(
                 config.Value.Subject,

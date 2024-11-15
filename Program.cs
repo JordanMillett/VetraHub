@@ -12,24 +12,6 @@ using VetraHub;
 
 public class Program
 {
-    static string DatabaseSize()
-    {
-        string fileName = "notifications.db";
-        string filePath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
-        
-        if (File.Exists(filePath))
-        {
-            FileInfo fileInfo = new FileInfo(filePath);
-            long fileSizeInBytes = fileInfo.Length;
-            double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
-            return $"{fileSizeInMB:F2} MB";
-        }
-        else
-        {
-            return "Empty";
-        }
-    }
-    
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -81,32 +63,22 @@ public class Program
 
         builder.Services.AddSingleton<AlertService>();
         builder.Services.AddHostedService<NotificationService>();
-        builder.Services.AddHostedService<HealthService>();
+        builder.Services.AddSingleton<HealthService>();
+        builder.Services.AddHostedService(provider => provider.GetRequiredService<HealthService>());
 
         var app = builder.Build();
         
         AlertService Alert = app.Services.GetRequiredService<AlertService>();
+        HealthService Health = app.Services.GetRequiredService<HealthService>();
         
-        DateTime ServerStartTime = DateTime.UtcNow;
-        
-        // Log shutdown time when the application stops
         var lifetime = app.Lifetime;
         lifetime.ApplicationStopping.Register(() =>
         {
-            SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
-            LogRepository logs = app.Services.GetRequiredService<LogRepository>();
-            KeyRepository keys = app.Services.GetRequiredService<KeyRepository>();
-            TimeSpan Uptime = DateTime.UtcNow - ServerStartTime;
-            
-            logs.AddLog($"Server uptime was {Uptime.Days} days {Uptime.Hours} hours {Uptime.Minutes} minutes {Uptime.Seconds} seconds");
-            logs.AddLog($"{DatabaseSize()} Server shutdown with {repo.GetSubscriberCount()} subscribers and {keys.GetMaxSubscribers()} sub cap");
+            Health.LogHealth(null);
             Alert.NotifyAlertDevice("Server Shutdown");
         });
-        
-        SubscriberRepository repo = app.Services.GetRequiredService<SubscriberRepository>();
-        LogRepository logs = app.Services.GetRequiredService<LogRepository>();
-        KeyRepository keys = app.Services.GetRequiredService<KeyRepository>();
-        logs.AddLog($"{DatabaseSize()} Server started with {repo.GetSubscriberCount()} subscribers and {keys.GetMaxSubscribers()} sub cap");
+
+        Health.LogHealth(null);
         Alert.NotifyAlertDevice("Server Started");
         
         app.UseCors("AllowSpecificOrigins");
@@ -187,7 +159,7 @@ public class Program
             return Results.StatusCode(200); //OK
         });
         
-        app.MapPost("/api/shutdown", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime) =>
+        app.MapPost("/api/shutdown", (PasswordMessage message, IOptions<WebPushConfig> config, LogRepository logs, IHostApplicationLifetime lifetime) =>
         {
             if (message.Password != config.Value.PasswordHash)
             {
@@ -200,7 +172,7 @@ public class Program
             return Results.StatusCode(200); //OK
         });
         
-        app.MapPost("/api/restart", (PasswordMessage message, IOptions<WebPushConfig> config, IHostApplicationLifetime lifetime) =>
+        app.MapPost("/api/restart", (PasswordMessage message, IOptions<WebPushConfig> config, LogRepository logs, IHostApplicationLifetime lifetime) =>
         {
             if (message.Password != config.Value.PasswordHash)
             {
@@ -347,8 +319,8 @@ public class Program
 
             if (repo.GetSubscriberCount() >= keys.GetMaxSubscribers())
             {
-                logs.AddLog("Subscriber limit reached, cannot add new device");
-                Alert.NotifyAlertDevice("Max Subscribers Reached");
+                //logs.AddLog("Subscriber limit reached, cannot add new device");
+                Alert.NotifyAlertDevice("Subscriber limit reached, cannot add new device");
                 return Results.StatusCode(507); //Insufficient Storage
             }
             
