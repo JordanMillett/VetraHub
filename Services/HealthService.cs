@@ -12,17 +12,19 @@ public class HealthService : IHostedService, IDisposable
     private readonly LogRepository logs;
     private readonly SubscriberRepository repo;
     private readonly KeyRepository keys;
+    private readonly TrafficRepository traffic;
     private readonly Timer timer;
     
     DateTime ServerStartTime = DateTime.UtcNow;
 
     public static int CheckIntervalMinutes = 120;
     
-    public HealthService(LogRepository logrepo, SubscriberRepository subrepo, KeyRepository keysrepo)
+    public HealthService(LogRepository logrepo, SubscriberRepository subrepo, KeyRepository keysrepo, TrafficRepository trafficrepo)
     {
         logs = logrepo;
         repo = subrepo;
         keys = keysrepo;
+        traffic = trafficrepo;
 
         timer = new Timer(LogHealth, null, TimeSpan.FromMinutes(CheckIntervalMinutes), TimeSpan.FromMinutes(CheckIntervalMinutes));
 
@@ -38,7 +40,7 @@ public class HealthService : IHostedService, IDisposable
         logs.AddLog($"Operating System: {RuntimeInformation.OSDescription}");
         
         logs.AddLog($"Server Uptime: {Uptime.Days} days {Uptime.Hours} hours {Uptime.Minutes} minutes {Uptime.Seconds} seconds");
-        logs.AddLog($"{DatabaseSize()} database with {repo.GetSubscriberCount()} subscribers and {keys.GetMaxSubscribers()} sub cap");
+        logs.AddLog($"{DatabaseSize()} database, {repo.GetSubscriberCount()} subscribers, {keys.GetMaxSubscribers()} sub cap, {traffic.GetTrafficCount()} unique visitors");
     
         logs.AddLog($"Memory Usage: {GetMemoryUsage()} MB");
     }

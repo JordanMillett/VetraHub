@@ -104,7 +104,12 @@ public class Program
 
         app.MapPost("/api/traffic", (TrafficMessage message, HttpContext context, TrafficRepository traffic, LogRepository logs) =>
         {
-            string address = context.Connection.RemoteIpAddress!.ToString();
+            string address = context.Request.Headers["X-Forwarded-For"]!;
+
+            if (string.IsNullOrEmpty(address))
+            {
+                address = context.Connection.RemoteIpAddress!.ToString();
+            }
 
             traffic.AddTraffic(address, message, logs);
         });

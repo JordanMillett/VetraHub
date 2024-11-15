@@ -15,6 +15,15 @@ public class TrafficRepository
     {
         using var connection = new SqliteConnection(connectionID);
 
+        var alreadyExists = connection.QuerySingleOrDefault<int>(@"
+            SELECT COUNT(1) 
+            FROM Traffic 
+            WHERE Address = @Address;
+        ", new { Address = address });
+
+        if (alreadyExists > 0)
+            return;
+
         connection.Execute(@"
             INSERT INTO Traffic (Address, Name, Version, Layout, Manufacturer, Product, Description, System, Timezone, Language)
             VALUES (@Address, @Name, @Version, @Layout, @Manufacturer, @Product, @Description, @System, @Timezone, @Language);
@@ -33,6 +42,12 @@ public class TrafficRepository
         });
 
         logs.AddLog($"New traffic from {address} in {data.Timezone}");
+    }
+    
+    public int GetTrafficCount()
+    {
+        using var connection = new SqliteConnection(connectionID);
+        return connection.QuerySingle<int>("SELECT COUNT(*) FROM Traffic");
     }
 
     public IEnumerable<DataTraffic> GetAllTraffic()
