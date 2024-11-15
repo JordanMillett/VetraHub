@@ -87,6 +87,23 @@ public class Program
         {
             return Results.Ok(true);
         });
+
+        app.MapPost("/api/traffic", (TrafficMessage message, HttpContext context) =>
+        {
+            string address = context.Connection.RemoteIpAddress!.ToString();
+
+            Console.WriteLine($"Client IP: {address}");
+            
+            Console.WriteLine($"Name: {message.Name}");
+            Console.WriteLine($"Version: {message.Version}");
+            Console.WriteLine($"Layout: {message.Layout}");
+            Console.WriteLine($"Manufacturer: {message.Manufacturer}");
+            Console.WriteLine($"Product: {message.Product}");
+            Console.WriteLine($"Description: {message.Description}");
+            Console.WriteLine($"Operating System: {message.System}");
+            Console.WriteLine($"Timezone: {message.Timezone}");
+            Console.WriteLine($"Language: {message.Language}");
+        });
         
         app.MapPost("/api/update", async (HttpRequest message, IOptions<WebPushConfig> config, LogRepository logs) =>
         {

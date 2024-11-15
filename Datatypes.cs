@@ -27,6 +27,20 @@ namespace  VetraHub
     }
 
     //SYNC ACROSS VETRA
+    public class TrafficMessage
+    {
+        public required string Name { get; set; }
+        public required string Version { get; set; }
+        public required string Layout { get; set; }
+        public required string Manufacturer { get; set; }
+        public required string Product { get; set; }
+        public required string Description { get; set; }
+        public required string System { get; set; }
+        public required string Timezone { get; set; }
+        public required string Language { get; set; }
+    }
+
+    
     public class AlertDeviceMessage
     {
         public required string Endpoint { get; set; }
