@@ -25,18 +25,11 @@ public class TrafficRepository
             return;
 
         connection.Execute(@"
-            INSERT INTO Traffic (Address, Name, Version, Layout, Manufacturer, Product, Description, System, Timezone, Language)
-            VALUES (@Address, @Name, @Version, @Layout, @Manufacturer, @Product, @Description, @System, @Timezone, @Language);
+            INSERT INTO Traffic (Address, Timezone, Language)
+            VALUES (@Address, @Timezone, @Language);
         ", new 
         {
             Address = address,
-            Name = data.Name,
-            Version = data.Version,
-            Layout = data.Layout,
-            Manufacturer = data.Manufacturer,
-            Product = data.Product,
-            Description = data.Description,
-            System = data.System,
             Timezone = data.Timezone,
             Language = data.Language
         });
